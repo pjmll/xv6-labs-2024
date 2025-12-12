@@ -503,3 +503,132 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void)
+{
+  uint64 addr;
+  uint64 len;
+  int prot;
+  int flags;
+  int fd;
+  uint64 offset;
+  
+  argaddr(0, &addr);
+  argaddr(1, &len);
+  argint(2, &prot);
+  argint(3, &flags);
+  argint(4, &fd);
+  argaddr(5, &offset);
+
+  if(addr != 0)
+    return -1;
+  if(prot & ~(PROT_READ|PROT_WRITE|PROT_EXEC))
+    return -1;
+
+  struct proc *p = myproc();
+  struct file *f = p->ofile[fd];
+  if(f == 0)
+    return -1;
+  if((flags & MAP_SHARED) && (prot & PROT_WRITE) && !f->writable)
+    return -1;
+
+  struct vma *v = 0;
+  for(int i = 0; i < NVMA; i++) {
+    if(p->vmas[i].used == 0) {
+      v = &p->vmas[i];
+      break;
+    }
+  }
+  if(v == 0)
+    return -1;
+
+  uint64 va = p->sz;
+  if(va + len > MAXVA)
+    return -1;
+
+  v->used = 1;
+  v->addr = va;
+  v->len = len;
+  v->prot = prot;
+  v->flags = flags;
+  v->file = filedup(f);  // 增加文件引用计数
+  v->offset = offset;
+
+  p->sz = va + len;
+  
+  return va;
+}
+
+uint64
+sys_munmap(void)
+{
+  uint64 addr;
+  uint64 len;
+  
+  argaddr(0, &addr);
+  argaddr(1, &len);
+
+  struct proc *p = myproc();
+  struct vma *vma = 0;
+
+  int i;
+  for(i = 0; i < NVMA; i++) {
+    if(p->vmas[i].used && addr >= p->vmas[i].addr && addr < p->vmas[i].addr + p->vmas[i].len) {
+      vma = &p->vmas[i];
+      break;
+    }
+  }
+  if(vma == 0)
+    return -1;
+
+  if(addr != vma->addr && addr + len != vma->addr + vma->len)
+    return -1;
+
+  if((vma->flags & MAP_SHARED) && (vma->prot & PROT_WRITE)) {
+    struct file *f = vma->file;
+    if(f->type == FD_INODE) {
+      int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
+      int j = 0;
+      while(j < len){
+        int n1 = len - j;
+        if(n1 > max)
+          n1 = max;
+
+        begin_op();
+        ilock(f->ip);
+
+        uint64 file_offset = vma->offset + (addr - vma->addr) + j;
+        int r = 0;
+        if (file_offset < f->ip->size) {
+            int write_len = n1;
+            if (file_offset + write_len > f->ip->size)
+                write_len = f->ip->size - file_offset;
+            r = writei(f->ip, 1, addr + j, file_offset, write_len);
+        }
+        iunlock(f->ip);
+        end_op();
+        
+        if(r < 0)
+          break;
+        j += n1;
+      }
+    }
+  }
+
+  uvmunmap(p->pagetable, addr, len / PGSIZE, 1);
+
+  if(addr == vma->addr) {
+    vma->addr += len;
+    vma->len -= len;
+    vma->offset += len;
+  } else {
+    vma->len -= len;
+  }
+  
+  if(vma->len == 0) {
+    fileclose(vma->file);
+    vma->used = 0;
+  }
+  return 0;
+}

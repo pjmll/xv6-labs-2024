@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
 
 struct cpu cpus[NCPU];
 
@@ -296,6 +300,13 @@ fork(void)
   }
   np->sz = p->sz;
 
+  for(int i = 0; i < NVMA; i++) {
+    if(p->vmas[i].used) {
+      np->vmas[i] = p->vmas[i];
+      filedup(np->vmas[i].file);  // 增加文件引用计数
+    }
+  }
+
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -350,6 +361,46 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  for(int i = 0; i < NVMA; i++) {
+    if(p->vmas[i].used) {
+      if((p->vmas[i].flags & MAP_SHARED) && (p->vmas[i].prot & PROT_WRITE)) {
+        struct file *f = p->vmas[i].file;
+        uint64 addr = p->vmas[i].addr;
+        uint64 len = p->vmas[i].len;
+        
+        if(f->type == FD_INODE) {
+          int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
+          int j = 0;
+          while(j < len){
+            int n1 = len - j;
+            if(n1 > max)
+              n1 = max;
+
+            begin_op();
+            ilock(f->ip);
+            uint64 file_offset = p->vmas[i].offset + j;
+            int r = 0;
+            if (file_offset < f->ip->size) {
+                int write_len = n1;
+                if (file_offset + write_len > f->ip->size)
+                    write_len = f->ip->size - file_offset;
+                r = writei(f->ip, 1, addr + j, file_offset, write_len);
+            }
+            iunlock(f->ip);
+            end_op();
+            
+            if(r < 0)
+              break;
+            j += n1;
+          }
+        }
+      }
+      uvmunmap(p->pagetable, p->vmas[i].addr, p->vmas[i].len / PGSIZE, 1);
+      fileclose(p->vmas[i].file);
+      p->vmas[i].used = 0;
+    }
+  }
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){

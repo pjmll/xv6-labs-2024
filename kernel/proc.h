@@ -1,3 +1,15 @@
+#define NVMA 16
+
+struct vma {
+  int used;                   // 是否使用
+  uint64 addr;                // 起始虚拟地址
+  uint64 len;                 // 长度
+  int prot;                   // 保护权限
+  int flags;                  // MAP_SHARED或MAP_PRIVATE
+  struct file *file;          // 映射的文件
+  uint64 offset;              // 文件偏移
+};
+
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -104,4 +116,5 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct vma vmas[NVMA];        // 虚拟内存区域数组
 };
