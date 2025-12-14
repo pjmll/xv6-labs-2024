@@ -1,4 +1,4 @@
-#mmap实验代码目录结构
+# mmap实验代码目录结构
 ## `kernel/proc.h`：定义数据结构
 ## `user/user.h`：声明了新系统调用的用户空间原型
 ## `kernel/syscall.h`:为SYS_mmap和SYS_munmap分配了唯一的整数标识符
