@@ -1,9 +1,9 @@
-# mmap实验代码目录结构
-## `kernel/proc.h`：定义数据结构
-## `user/user.h`：声明了新系统调用的用户空间原型
-## `kernel/syscall.h`:为SYS_mmap和SYS_munmap分配了唯一的整数标识符
-## `user/usys.pl`:注册这两个系统调用
-## `kernel/sysfile.c`：sys_mmap、sys_munmap系统调用
-## `kernel/trap.c`：usertrap函数捕获并处理异常
-## `kernel/proc.c`：fork、exit实现
-## `kernel/vm.c`：uvmcopy、uvmunmap处理无效的PTE
+mmap实验代码目录结构
+kernel/proc.h：定义数据结构
+user/user.h：声明了新系统调用的用户空间原型
+kernel/syscall.h:为SYS_mmap和SYS_munmap分配了唯一的整数标识符
+user/usys.pl:注册这两个系统调用
+kernel/sysfile.c：sys_mmap、sys_munmap系统调用
+kernel/trap.c：usertrap函数捕获并处理异常
+kernel/proc.c：fork、exit实现
+kernel/vm.c：uvmcopy、uvmunmap处理无效的PTE
